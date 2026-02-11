@@ -7,6 +7,7 @@ import QuantLib as ql
 from fixedincomelib.date import Date, Period
 from fixedincomelib.date.basics import TermOrTerminationDate
 from fixedincomelib.utilities import Registry, get_config
+from fixedincomelib.market.data_conventions import DataConventionRegistry
 
 ######################################### REGISTRY #########################################
 

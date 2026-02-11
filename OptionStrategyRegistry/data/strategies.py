@@ -168,3 +168,99 @@ class OptionStrategy:
 class OptionStrategyRegistry(Registry):
 
 ### TODO
+
+    """
+    Singleton registry: loads configs/strategies.yaml once,
+    and supports register() with dict or list inputs.
+    """
+
+    def __new__(cls):
+        return super().__new__(cls, get_config_folder(), cls.__name__)
+
+    def __init__(self):
+        if getattr(self, "_strategies_loaded", False):
+            return
+        self._strategies_loaded = True
+
+        # Canonical storage (do NOT rely on base Registry internal field names)
+        self._strategies_ = {}
+
+        self._load_default_strategies()
+
+    def _load_default_strategies(self) -> None:
+        yaml_path = os.path.join(get_config_folder(), "strategies.yaml")
+        if not os.path.exists(yaml_path):
+            raise FileNotFoundError(f"strategies.yaml not found: {yaml_path}")
+
+        with open(yaml_path, "r") as f:
+            data = yaml.safe_load(f)
+
+        if data is None:
+            return
+
+        if isinstance(data, dict) and "strategies" in data and isinstance(data["strategies"], dict):
+            data = data["strategies"]
+
+        if not isinstance(data, dict):
+            raise ValueError("strategies.yaml must be a dict of strategies (or under key 'strategies').")
+
+        for name, content in data.items():
+            self.register(name, content)
+
+    def register(self, key, value) -> None:
+        # Build OptionStrategy object from input
+        if isinstance(value, OptionStrategy):
+            strategy = value
+
+        elif isinstance(value, dict):
+            strategy = OptionStrategy.createFromDict(key, value)
+
+        elif isinstance(value, (list, tuple)):
+            # Form 1: [opt_types, delta_strikes, weights]
+            if (
+                len(value) == 3
+                and isinstance(value[0], (list, tuple))
+                and isinstance(value[1], (list, tuple))
+                and isinstance(value[2], (list, tuple))
+            ):
+                strategy = OptionStrategy.createFromList(
+                    key, list(value[0]), list(value[1]), list(value[2])
+                )
+            else:
+                # Form 2: list of legs [(opt_type, delta_strike, weight), ...]
+                opt_types, delta_strikes, weights = [], [], []
+                for leg in value:
+                    if not isinstance(leg, (list, tuple)) or len(leg) != 3:
+                        raise ValueError(
+                            "List input must be [opt_types, delta_strikes, weights] "
+                            "or [(opt_type, delta_strike, weight), ...]"
+                        )
+                    opt_types.append(leg[0])
+                    delta_strikes.append(float(leg[1]))
+                    weights.append(float(leg[2]))
+                strategy = OptionStrategy.createFromList(key, opt_types, delta_strikes, weights)
+
+        else:
+            raise TypeError("register() expects OptionStrategy, dict, or list/tuple input.")
+
+        # Store in our canonical dict (this guarantees list_registry_keys works)
+        self._strategies_[key] = strategy
+
+        # Also store in base registry for compatibility (doesn't matter how it stores internally)
+        try:
+            super().register(key, strategy)
+        except Exception:
+            # If base Registry has a different signature/behavior, ignore; our dict is authoritative.
+            pass
+
+        # If base has known containers, keep them in sync (optional)
+        if hasattr(self, "_map"):
+            self._map[key] = strategy
+        if hasattr(self, "_store"):
+            self._store[key] = strategy
+
+    def get(self, key: str) -> Optional[OptionStrategy]:
+        return self._strategies_.get(key)
+
+    def list_registry_keys(self):
+        return list(self._strategies_.keys())

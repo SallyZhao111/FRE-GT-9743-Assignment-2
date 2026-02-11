@@ -11,7 +11,7 @@ def qfAddPeriod(start_date : str, term : str, business_day_convention : Optional
         BusinessDayConvention(business_day_convention), 
         HolidayConvention(holiday_convention), 
         end_of_month)
-    return this_date.ISO()
+    return this_date.ISO() # YYYY-MM-DD
 
 def qfAccrued(start_date : str, end_date : str, accrual_basis : Optional[str]='NONE', business_day_convention : Optional[str]='NONE', holiday_convention : Optional[str]='NONE'):
     return accrued(
